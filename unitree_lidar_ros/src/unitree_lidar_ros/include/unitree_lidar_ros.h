@@ -104,30 +104,33 @@ public:
     UnitreeLidarRosNode(ros::NodeHandle nh)
     {
 
-        // Load config parameters
-        nh.param("/unitree_lidar_ros_node/initialize_type", initialize_type_, 1);
-        nh.param("/unitree_lidar_ros_node/work_mode", work_mode_, 0);
-        nh.param("/unitree_lidar_ros_node/range_min", range_min_, 0.0);
-        nh.param("/unitree_lidar_ros_node/range_max", range_max_, 100.0);
-        nh.param("/unitree_lidar_ros_node/use_system_timestamp", use_system_timestamp_, true);
+        // Load config parameters from this node's private namespace (each utl2_* node
+        // loads its own <rosparam> block there; the upstream hardcoded global namespace
+        // could not support the three per-lidar instances).
+        ros::NodeHandle nh_private("~");
+        nh_private.param("initialize_type", initialize_type_, 1);
+        nh_private.param("work_mode", work_mode_, 0);
+        nh_private.param("range_min", range_min_, 0.0);
+        nh_private.param("range_max", range_max_, 100.0);
+        nh_private.param("use_system_timestamp", use_system_timestamp_, true);
 
-        nh.param("/unitree_lidar_ros_node/serial_port", serial_port, std::string("/dev/ttyACM0"));
-        nh.param("/unitree_lidar_ros_node/baudrate", baudrate_, 4000000);
+        nh_private.param("serial_port", serial_port, std::string("/dev/ttyACM0"));
+        nh_private.param("baudrate", baudrate_, 4000000);
 
-        nh.param("/unitree_lidar_ros_node/lidar_port", lidar_port_, 6101);
-        nh.param("/unitree_lidar_ros_node/lidar_ip", lidar_ip_, std::string("10.10.10.10"));
-        nh.param("/unitree_lidar_ros_node/pc_port", local_port_, 6201);
-        nh.param("/unitree_lidar_ros_node/pc_ip", local_ip_, std::string("10.10.10.100"));
+        nh_private.param("lidar_port", lidar_port_, 6101);
+        nh_private.param("lidar_ip", lidar_ip_, std::string("10.10.10.10"));
+        nh_private.param("pc_port", local_port_, 6201);
+        nh_private.param("pc_ip", local_ip_, std::string("10.10.10.100"));
 
-        nh.param("/unitree_lidar_ros_node/cloud_frame", cloud_frame_, std::string("unilidar_lidar"));
-        nh.param("/unitree_lidar_ros_node/cloud_topic", cloud_topic_, std::string("unilidar/cloud"));
-        nh.param("/unitree_lidar_ros_node/cloud_scan_num", cloud_scan_num_, 18);
+        nh_private.param("cloud_frame", cloud_frame_, std::string("unilidar_lidar"));
+        nh_private.param("cloud_topic", cloud_topic_, std::string("unilidar/cloud"));
+        nh_private.param("cloud_scan_num", cloud_scan_num_, 18);
 
-        nh.param("/unitree_lidar_ros_node/imu_frame", imu_frame_, std::string("unilidar_imu"));
-        nh.param("/unitree_lidar_ros_node/imu_topic", imu_topic_, std::string("unilidar/imu"));
+        nh_private.param("imu_frame", imu_frame_, std::string("unilidar_imu"));
+        nh_private.param("imu_topic", imu_topic_, std::string("unilidar/imu"));
 
-        nh.param("/unitree_lidar_ros_node/laserscan_frame", laserscan_frame_, std::string("unilidar_lidar"));
-        nh.param("/unitree_lidar_ros_node/laserscan_topic", laserscan_topic_, std::string("unilidar/laserscan"));
+        nh_private.param("laserscan_frame", laserscan_frame_, std::string("unilidar_lidar"));
+        nh_private.param("laserscan_topic", laserscan_topic_, std::string("unilidar/laserscan"));
 
         // Initialize UnitreeLidarReader
         lsdk_ = createUnitreeLidarReader();
@@ -194,18 +197,13 @@ public:
 
                 pub_imu_.publish(imuMsg);
 
-                // publish tf from initial imu to real-time imu
+                // Modified from upstream: publish only the static cloud->imu extrinsic
+                // (datasheet, identity rotation), not the imu_initial->imu->cloud chain.
+                // TF tree:  cloud_frame -> imu_frame
                 tf::Transform transform;
-                transform.setOrigin(tf::Vector3(0, 0, 0));
-                transform.setRotation(tf::Quaternion(imu.quaternion[1], imu.quaternion[2],
-                                                     imu.quaternion[3], imu.quaternion[0]));
-                tfbc1_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), imu_frame_ + "_initial", imu_frame_));
-
-                // publish tf from imu to lidar
-                transform.setOrigin(tf::Vector3(0.007698, 0.014655, -0.00667));
+                transform.setOrigin(tf::Vector3(-0.007698, -0.014655, 0.00667));
                 transform.setRotation(tf::Quaternion(0, 0, 0, 1));
-                tfbc1_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), imu_frame_, cloud_frame_));
-
+                tfbc1_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), cloud_frame_, imu_frame_));
             }
             return true;
         }

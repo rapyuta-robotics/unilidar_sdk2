@@ -60,3 +60,7 @@ set(EXTRA_LIBS
 
 add_executable(unitree_lidar_ros_node src/unitree_lidar_ros_node.cpp)
 target_link_libraries(unitree_lidar_ros_node ${EXTRA_LIBS})
+
+install(TARGETS unitree_lidar_ros_node
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
