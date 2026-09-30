@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 // ROS
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -98,7 +101,29 @@ protected:
 
     double range_min_;
     double range_max_;
+    double range_offset_;
     bool use_system_timestamp_;
+
+    // Shift points along their ray from the sensor origin; drop those at or behind it
+    void applyRangeOffset(pcl::PointCloud<PointType>::Ptr cloud)
+    {
+        size_t n = 0;
+        for (size_t i = 0; i < cloud->points.size(); ++i)
+        {
+            PointType p = cloud->points[i];
+            const double r = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (r <= 0.0 || r + range_offset_ <= 0.0)
+                continue;
+            const float s = (r + range_offset_) / r;
+            p.x *= s;
+            p.y *= s;
+            p.z *= s;
+            cloud->points[n++] = p;
+        }
+        cloud->points.resize(n);
+        cloud->width = n;
+        cloud->height = 1;
+    }
 
 public:
     UnitreeLidarRosNode(ros::NodeHandle nh)
@@ -112,6 +137,7 @@ public:
         nh_private.param("work_mode", work_mode_, 0);
         nh_private.param("range_min", range_min_, 0.0);
         nh_private.param("range_max", range_max_, 100.0);
+        nh_private.param("range_offset", range_offset_, 0.0);
         nh_private.param("use_system_timestamp", use_system_timestamp_, true);
 
         nh_private.param("serial_port", serial_port, std::string("/dev/ttyACM0"));
@@ -214,6 +240,8 @@ public:
             if (lsdk_->getPointCloud(cloud))
             {
                 transformUnitreeCloudToPCL(cloud, cloudOut);
+                if (range_offset_ != 0.0)
+                    applyRangeOffset(cloudOut);
                 publishCloud(&pub_pointcloud_raw_, cloudOut, ros::Time::now().fromSec(cloud.stamp), cloud_frame_);
             }
 
@@ -250,6 +278,8 @@ public:
             for (unsigned int i = 0; i < data.point_num; ++i)
             {
                 scan.ranges[i] = data.ranges[i] * data.param.range_scale;
+                if (range_offset_ != 0.0 && scan.ranges[i] > 0.0f)
+                    scan.ranges[i] = std::max(0.0, scan.ranges[i] + range_offset_);
                 scan.intensities[i] = data.intensities[i];
 
                 if (scan.ranges[i] > scan.range_min && scan.ranges[i] < scan.range_max)
