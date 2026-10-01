@@ -102,19 +102,20 @@ protected:
     double range_min_;
     double range_max_;
     double range_offset_;
+    double range_scale_;
     bool use_system_timestamp_;
 
-    // Shift points along their ray from the sensor origin; drop those at or behind it
-    void applyRangeOffset(pcl::PointCloud<PointType>::Ptr cloud)
+    // Map r to r * range_scale + range_offset along each ray; drop points at or behind the origin
+    void applyRangeCorrection(pcl::PointCloud<PointType>::Ptr cloud)
     {
         size_t n = 0;
         for (size_t i = 0; i < cloud->points.size(); ++i)
         {
             PointType p = cloud->points[i];
             const double r = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
-            if (r <= 0.0 || r + range_offset_ <= 0.0)
+            if (r <= 0.0 || r * range_scale_ + range_offset_ <= 0.0)
                 continue;
-            const float s = (r + range_offset_) / r;
+            const float s = range_scale_ + range_offset_ / r;
             p.x *= s;
             p.y *= s;
             p.z *= s;
@@ -138,6 +139,7 @@ public:
         nh_private.param("range_min", range_min_, 0.0);
         nh_private.param("range_max", range_max_, 100.0);
         nh_private.param("range_offset", range_offset_, 0.0);
+        nh_private.param("range_scale", range_scale_, 1.0);
         nh_private.param("use_system_timestamp", use_system_timestamp_, true);
 
         nh_private.param("serial_port", serial_port, std::string("/dev/ttyACM0"));
@@ -240,8 +242,8 @@ public:
             if (lsdk_->getPointCloud(cloud))
             {
                 transformUnitreeCloudToPCL(cloud, cloudOut);
-                if (range_offset_ != 0.0)
-                    applyRangeOffset(cloudOut);
+                if (range_offset_ != 0.0 || range_scale_ != 1.0)
+                    applyRangeCorrection(cloudOut);
                 publishCloud(&pub_pointcloud_raw_, cloudOut, ros::Time::now().fromSec(cloud.stamp), cloud_frame_);
             }
 
@@ -278,8 +280,8 @@ public:
             for (unsigned int i = 0; i < data.point_num; ++i)
             {
                 scan.ranges[i] = data.ranges[i] * data.param.range_scale;
-                if (range_offset_ != 0.0 && scan.ranges[i] > 0.0f)
-                    scan.ranges[i] = std::max(0.0, scan.ranges[i] + range_offset_);
+                if ((range_offset_ != 0.0 || range_scale_ != 1.0) && scan.ranges[i] > 0.0f)
+                    scan.ranges[i] = std::max(0.0, scan.ranges[i] * range_scale_ + range_offset_);
                 scan.intensities[i] = data.intensities[i];
 
                 if (scan.ranges[i] > scan.range_min && scan.ranges[i] < scan.range_max)
