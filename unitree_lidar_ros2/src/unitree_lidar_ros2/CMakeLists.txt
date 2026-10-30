@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.12)
 project(unitree_lidar_ros2)
 
 # Default to C99
@@ -23,35 +23,34 @@ find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+
+set(UNILIDAR_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../unitree_lidar_sdk)
 
 include_directories(
-  ${PCL_INCLUDE_DIRS} 
+  ${PCL_INCLUDE_DIRS}
   include
-  ../../../unitree_lidar_sdk/include
+  ${UNILIDAR_SDK_DIR}/include
 )
 
 link_directories(
   ${PCL_LIBRARY_DIRS}
-  ../../../unitree_lidar_sdk/lib/${CMAKE_SYSTEM_PROCESSOR}
 )
 
 add_definitions(${PCL_DEFINITIONS})
 
 add_executable(unitree_lidar_ros2_node src/unitree_lidar_ros2_node.cpp)
 
-target_link_libraries( unitree_lidar_ros2_node
-  ${Boost_SYSTEM_LIBRARY}
+target_link_libraries(unitree_lidar_ros2_node
+  rclcpp::rclcpp
+  ${std_msgs_TARGETS}
+  ${sensor_msgs_TARGETS}
+  ${geometry_msgs_TARGETS}
+  ${std_srvs_TARGETS}
+  tf2_ros::tf2_ros
+  pcl_conversions::pcl_conversions
   ${PCL_LIBRARIES}
-  libunilidar_sdk2.a
-)
-
-ament_target_dependencies(
-  unitree_lidar_ros2_node
-  rclcpp std_msgs 
-  sensor_msgs
-  geometry_msgs 
-  tf2_ros
-  pcl_conversions
+  ${UNILIDAR_SDK_DIR}/lib/${CMAKE_SYSTEM_PROCESSOR}/libunilidar_sdk2.a
 )
 
 install(TARGETS
