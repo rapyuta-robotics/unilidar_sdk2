@@ -204,6 +204,16 @@ rcl_interfaces::msg::SetParametersResult UnitreeLidarSDKNode::onSetParameters(
 {
     rcl_interfaces::msg::SetParametersResult result;
     result.successful = true;
+    // Everything else is read once at startup
+    for (const auto &param : params)
+    {
+        if (param.get_name() != "range_offset" && param.get_name() != "range_scale")
+        {
+            result.successful = false;
+            result.reason = param.get_name() + " is read at startup only; restart the node to change it";
+            return result;
+        }
+    }
     for (const auto &param : params)
     {
         if (param.get_name() == "range_offset")
