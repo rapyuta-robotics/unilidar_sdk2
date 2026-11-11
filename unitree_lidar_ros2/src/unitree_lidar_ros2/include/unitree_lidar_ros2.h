@@ -83,6 +83,7 @@ protected:
 
     std::string imu_frame_;
     std::string imu_topic_;
+    bool publish_imu_tf_;
 
     std::string laserscan_frame_;
     std::string laserscan_topic_;
@@ -121,6 +122,7 @@ UnitreeLidarSDKNode::UnitreeLidarSDKNode(const rclcpp::NodeOptions &options)
 
     declare_parameter<std::string>("imu_frame", "unilidar_imu");
     declare_parameter<std::string>("imu_topic", "unilidar/imu");
+    declare_parameter<bool>("publish_imu_tf", true);
 
     declare_parameter<std::string>("laserscan_frame", "unilidar_lidar");
     declare_parameter<std::string>("laserscan_topic", "unilidar/laserscan");
@@ -148,6 +150,7 @@ UnitreeLidarSDKNode::UnitreeLidarSDKNode(const rclcpp::NodeOptions &options)
     
     imu_frame_ = get_parameter("imu_frame").as_string();
     imu_topic_ = get_parameter("imu_topic").as_string();
+    publish_imu_tf_ = get_parameter("publish_imu_tf").as_bool();
 
     laserscan_frame_ = get_parameter("laserscan_frame").as_string();
     laserscan_topic_ = get_parameter("laserscan_topic").as_string();
@@ -181,16 +184,19 @@ UnitreeLidarSDKNode::UnitreeLidarSDKNode(const rclcpp::NodeOptions &options)
     pub_laser_scan_ = this->create_publisher<sensor_msgs::msg::LaserScan>(laserscan_topic_, 10);
 
     // TF tree: cloud_frame -> imu_frame (datasheet extrinsic, parallel axes)
-    static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(*this);
-    geometry_msgs::msg::TransformStamped transformStamped;
-    transformStamped.header.stamp = this->now();
-    transformStamped.header.frame_id = cloud_frame_;
-    transformStamped.child_frame_id = imu_frame_;
-    transformStamped.transform.translation.x = -0.007698;
-    transformStamped.transform.translation.y = -0.014655;
-    transformStamped.transform.translation.z = 0.00667;
-    transformStamped.transform.rotation.w = 1;
-    static_broadcaster_->sendTransform(transformStamped);
+    if (publish_imu_tf_)
+    {
+        static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(*this);
+        geometry_msgs::msg::TransformStamped transformStamped;
+        transformStamped.header.stamp = this->now();
+        transformStamped.header.frame_id = cloud_frame_;
+        transformStamped.child_frame_id = imu_frame_;
+        transformStamped.transform.translation.x = -0.007698;
+        transformStamped.transform.translation.y = -0.014655;
+        transformStamped.transform.translation.z = 0.00667;
+        transformStamped.transform.rotation.w = 1;
+        static_broadcaster_->sendTransform(transformStamped);
+    }
 
     param_cb_handle_ = this->add_on_set_parameters_callback(
         std::bind(&UnitreeLidarSDKNode::onSetParameters, this, _1));
